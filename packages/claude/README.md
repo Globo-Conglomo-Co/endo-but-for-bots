@@ -152,9 +152,72 @@ externally authored bytes, since that result re-enters the model's context. The
 child is spawned with a constructed env allowlist (not inherited-minus-one), so
 an inherited `ANTHROPIC_API_KEY` cannot silently bypass the pool.
 
-## Known gaps (prerequisites)
+## Inference backends over `@endo/inference`
 
-This increment is honest about what it does **not** yet do:
+[`designs/endo-claude-inference-backends.md`](../../designs/endo-claude-inference-backends.md)
+(phase 2) adds two `InferenceBackend` plugins over the provider-neutral
+[`@endo/inference`](../inference/README.md) seam. Each is made over **one**
+`CredentialSource`; choosing a credential is choosing which backend instance to
+hold. Neither depends on `@endo/claude-sandbox`; OS containment composes on top
+of them. They sit beside the phase-1 `make()` provider in [Usage](#usage),
+which this change leaves unchanged: its result tags (`pool-exhausted`,
+`bridge-down`, `facet-threw`, `nonzero-exit`, `parse-error`) are the
+phase-1 vocabulary.
+
+The backends are reached only through these subpaths; the root entry's
+`index.js` does not re-export them, so a consumer of `make()` loads none of
+their code. Every export a subpath module has is listed here.
+
+- `@endo/claude/cli-backend.js`: `makeClaudeCliBackend`, one confined
+  `claude -p` process per turn.
+- `@endo/claude/sdk-backend.js`: `makeClaudeSdkBackend`, one injected Agent
+  SDK `query` per turn; this package does not depend on the SDK.
+- `@endo/claude/confinement-options.js`: the Decision 3 confinement recipe
+  (`buildCliArguments`, `buildSdkOptions`, `confinedAllowList`) and
+  `checkPinnedVersion`.
+- `@endo/claude/constructed-environment.js`: `buildConstructedEnvironment`
+  and `CREDENTIAL_ENVIRONMENT_KEYS`, the variables a grant may deliver.
+- `@endo/claude/stream-reducer.js`: `makeClaudeStreamReducer` and
+  `usageFromResult`.
+- `@endo/claude/response-shapes.js`: the pinned failure-shape table
+  `CLAUDE_CODE_RESPONSE_SHAPES` (empty until verification gate 3), with
+  `makeClaudeCodeClassifier`, `turnOutcome`, `resultResponse`,
+  `exitResponse`, and `unavailable`.
+- `@endo/claude/scratch-directory.js`: `makeNodeScratchDirectoryMaker`, the
+  per-turn private `HOME` and working directory.
+
+A subpath's types are its modules' JSDoc, emitted as declarations beside each
+module when the package is packed. The named option and spec types
+(`ClaudeCliBackendOptions`, `ClaudeSdkBackendOptions`, `Spawn`, and the rest)
+are exported from the root entry's types.
+
+Each turn first compares `getVersion()` with the pinned `version` and runs
+nothing, not even `acquire()`, on a mismatch. Both backends acquire the
+credential before any other work, map a refusal to the
+matching tag, enforce the wall-clock, output-byte, and turn limits through the
+`@endo/inference` limit enforcer (the CLI backend kills the process group), and
+release the grant on every path. An optional `maxBudgetUsd` is a separate
+ceiling that the Claude Code binary enforces, not the limit enforcer. The
+projection's `formulaIdentifier` is never forwarded to the provider.
+The wall clock and cancellation bound every wait in the turn, the version check
+and the credential wait included, so a party that never answers cannot hold a
+turn open.
+A failure detail names an error by its code or class, never by its message,
+which may quote the credential.
+
+These backends put the credential in the process environment on purpose, which
+the `make()` provider's `FORBIDDEN_ENV_KEYS` tripwire forbids for its own child.
+That tripwire guards a pooled child against bypassing the pool with an inherited
+key; a backend here is made over one `CredentialSource`, so the grant *is* the
+admission and no pool exists to bypass. The cost is the interim-delivery
+residual of the design's Decision 5: the binary holds the credential, and so
+does the guest's stdio MCP server, which inherits the binary's environment
+([#1369](https://github.com/endojs/endo-but-for-bots/pull/1369) Gap 2). Use
+this delivery only for a single-principal deployment.
+Wrap an unsliced backend in the `@endo/inference` prompt-origin gate, and record
+usage with its usage recorder.
+
+## Known gaps (prerequisites)
 
 - **Kernel-level confinement of the `claude` tree.** `runConfinedTurn` (below)
   builds the harness side of the confined shape: the daemon connection, its

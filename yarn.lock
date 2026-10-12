@@ -1657,14 +1657,18 @@ __metadata:
   dependencies:
     "@endo/agent-mcp-stdio": "workspace:^"
     "@endo/agent-tools": "workspace:^"
+    "@endo/bytes": "workspace:^"
     "@endo/errors": "workspace:^"
     "@endo/eventual-send": "workspace:^"
     "@endo/exo": "workspace:^"
+    "@endo/far": "workspace:^"
+    "@endo/inference": "workspace:^"
     "@endo/init": "workspace:^"
     "@endo/pass-style": "workspace:^"
     "@endo/patterns": "workspace:^"
     "@endo/promise-kit": "workspace:^"
     "@endo/ses-ava": "workspace:^"
+    "@endo/utf8": "workspace:^"
     ava: "catalog:dev"
     c8: "catalog:dev"
     eslint: "catalog:dev"
@@ -2618,7 +2622,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@endo/inference@workspace:packages/inference":
+"@endo/inference@workspace:^, @endo/inference@workspace:packages/inference":
   version: 0.0.0-use.local
   resolution: "@endo/inference@workspace:packages/inference"
   dependencies:

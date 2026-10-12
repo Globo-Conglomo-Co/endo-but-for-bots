@@ -48,3 +48,8 @@ export { INFER_RESULT_TYPES } from './src/results.js';
 export { runConfinedTurn, readClaudeVersion } from './src/confined-turn.js';
 export { makeLaunch, resultFromStream } from './src/launch.js';
 export { makeSpawnFilesPreparer } from './src/spawn-files.js';
+
+// The `@endo/inference` backends (`makeClaudeCliBackend`, `makeClaudeSdkBackend`)
+// and their shared modules are reached only through the package's subpath
+// exports, such as `@endo/claude/cli-backend.js`, so a consumer of `make()` loads
+// none of their code. README.md § Inference backends lists every subpath export.
