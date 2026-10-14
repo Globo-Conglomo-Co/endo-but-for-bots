@@ -23,7 +23,9 @@ request per line and read one JSON response per line. Every request carries an
 - `install {name,source,grants?}`: bundle and install a guest module. Source can
   declare `const make = powers => ...`, export `make`, or be a factory expression.
   `grants` maps power names to existing inventory names, for example
-  `{store:"candidate-store"}`. The result is `{installed:name}`.
+  `{store:"candidate-store"}`. The source may export only `make` and may not
+  import modules or use `import.meta`; the driver checks this before the host
+  bundler reads it. The result is `{installed:name}`.
 - `install {name,store:true}`: install a separate persistent Far Map fixture
   under that name. It has `get`, `has`, `set`, and `delete` methods.
 - `invoke {name,method,args?}`: reacquire a named service through the admin

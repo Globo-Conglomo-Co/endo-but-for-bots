@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import process from 'node:process';
 
 const child = spawn(process.execPath, [new URL('./eval-driver.mjs', import.meta.url).pathname], {
   stdio: ['pipe', 'pipe', 'inherit'],

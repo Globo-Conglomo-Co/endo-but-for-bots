@@ -7,8 +7,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import process from 'node:process';
+import { installGuestSource } from './eval-source-policy.mjs';
 
 import { connectLocalControl } from '../src/control/local-control.js';
 import { serveThixotrope } from '../src/control/supervisor.js';
@@ -72,19 +72,14 @@ const needClient = () => {
 
 const installSource = async (name, source, grants) => {
   // Compartment Mapper needs an enclosing package.json for the entry URL.
-  const sourcePath = fileURLToPath(new URL(`./eval-${randomUUID()}.mjs`, import.meta.url));
-  const moduleSource = /\bexport\s+(?:const|function)\s+make\b/.test(source)
-    ? source
-    : /\b(?:const|function)\s+make\b/.test(source)
-      ? `${source}\nexport { make };\n`
-      : `export const make = (${source});\n`;
-  try {
-    await writeFile(sourcePath, moduleSource, { mode: 0o600 });
-    const { bundle } = await platform.bundler.bundle(sourcePath);
-    return await needClient().call('install', name, bundle, grants);
-  } finally {
-    await rm(sourcePath, { force: true });
-  }
+  return installGuestSource({
+    name, source, grants, sourceUrl: import.meta.url,
+    writeFile,
+    bundle: path => platform.bundler.bundle(path),
+    install: (entryName, bundle, entryGrants) =>
+      needClient().call('install', entryName, bundle, entryGrants),
+    removeFile: rm,
+  });
 };
 
 const operations = {

@@ -60,6 +60,7 @@
     "@endo/immutable-arraybuffer": "workspace:^",
     "@endo/init": "workspace:^",
     "@endo/ironhorse-prelude": "workspace:^",
+    "@endo/module-source": "workspace:^",
     "@endo/ocapn": "workspace:^",
     "@endo/pass-style": "workspace:^",
     "@endo/patterns": "workspace:^",
