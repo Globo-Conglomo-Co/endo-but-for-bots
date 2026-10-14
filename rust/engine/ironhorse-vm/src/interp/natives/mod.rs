@@ -15,3 +15,4 @@ mod regexp;
 mod resource;
 mod string;
 mod temporal;
+mod uri;

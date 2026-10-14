@@ -1008,6 +1008,11 @@ pub enum NativeMethod {
     /// One of the Iterator Helper prototype methods, indexed in the order
     /// installed by `create_intrinsics`.
     IteratorHelper(u8),
+    /// ECMAScript URI percent encoding and decoding globals.
+    UriEncode,
+    UriEncodeComponent,
+    UriDecode,
+    UriDecodeComponent,
 }
 
 /// One intrinsic (native) function ironhorse models. The variant is the
