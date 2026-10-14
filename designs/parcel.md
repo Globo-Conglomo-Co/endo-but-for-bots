@@ -19,7 +19,11 @@ and reconciles it with
 (layer 1, draft PR #1389).
 An earlier draft of this argument was circulated as an essay, "Passing Parcels".
 That draft was written against the `llm` tip and wrongly described `@endo/ocapn`'s private side table as the open problem.
-The stack already addresses that, so this document starts from the stack as it stands.
+The stack already moves the realm-wide brand and open hook into the layer-1 shim.
+Its layer-7 branch retains a narrower `sturdyRefDetails` table only so the OCapN
+codec can recover peer and swiss-number coordinates from values it minted.
+The Parcel pivot removes that remaining duplication: trusted OCapN code calls
+`Parcel.locate` and parses the location instead.
 
 ## What is the Problem Being Solved?
 
@@ -63,6 +67,7 @@ const parcel = new Parcel(location, open);
 
 passStyleOf(parcel);        // 'parcel'
 Parcel.open(parcel);        // Promise<Passable>
+E.open(parcel);             // Promise<Passable>, convenience spelling
 Parcel.isParcel(value);     // boolean, a brand check that confers no authority
 Parcel.locate(parcel);      // string, present on %InitialParcel% only
 ```
@@ -83,6 +88,8 @@ Parcel.locate(parcel);      // string, present on %InitialParcel% only
 - `Parcel.locate(parcel)` returns the location string.
   It exists only on `%InitialParcel%` (below).
   A non-parcel argument throws a `TypeError` synchronously, exposing a failed invariant rather than returning an optional value that every caller must narrow.
+- `E.open(parcel)` is the `@endo/eventual-send` convenience spelling of `Parcel.open(parcel)`, following `E.resolve`.
+  The former `E.enliven` spelling does not survive because it has not shipped and the Parcel vocabulary is `open`.
 
 The `open` hook receives the parcel as a second argument so that one hook function can serve many parcels and still apply identity-keyed policy.
 
@@ -129,6 +136,9 @@ defineProperties(SharedParcel, {
   open: { value: InitialParcel.open },
   isParcel: { value: InitialParcel.isParcel },
 });
+defineProperties(InitialParcel.prototype, {
+  constructor: { value: SharedParcel },
+});
 ```
 
 Permits gain `Parcel: '%InitialParcel%'` in `initialGlobalPropertyNames`, `Parcel: '%SharedParcel%'` in `sharedGlobalPropertyNames`, and entries for both constructors and the shared prototype.
@@ -136,16 +146,23 @@ An absent `Parcel` is not an error, so hosts that never installed the shim keep 
 
 ### Packaging
 
-The shim package is `@endo/parcel`.
-The remaining packaging decisions of layer 1 carry over unchanged.
+The first-wins packaging shape of layer 1 carries over under the new name and
+with the initial/shared authority split.
 
-- A ponyfill (`index.js`) and an installing entry (`shim.js`).
+- The package is `@endo/parcel`, with a ponyfill (`index.js`), an installing entry (`shim.js`), and a no-side-effect constructor-kit entry (`no-shim.js`).
 - First definer wins.
-  `selectParcel` adopts an existing valid `globalThis.Parcel` (a function with `open`, `isParcel`, and `locate` statics) and installs its own only if none exists.
+  Every evaluation races to select `globalThis.Parcel`; `selectParcel` adopts an existing valid constructor and installs its own only if none exists.
   Eval twins therefore share one constructor and one table.
 - The defining shim must run before `lockdown()` so that SES sees `Parcel` at `repairIntrinsics` time.
   A later evaluation of the shim, including one inside a compartment after `lockdown()`, races by shape-checking and adopting the constructor already visible there.
   It neither replaces the winner nor rejects it based on a version or contract marker.
+- The initial bootstrap installs the powered constructor, including `locate`, before lockdown.
+  An evaluation after lockdown in a child compartment cannot replace that binding and instead adopts the existing `%SharedParcel%`, which has `open` and `isParcel` but no `locate`.
+  A late evaluation fails only if no Parcel global is present to adopt.
+- Every later version silently adopts the first valid constructor, without a
+  contract or version marker.
+  An incompatible future primitive would need a new spelling instead of
+  weakening first-wins.
 - Before `lockdown()` the shim must not call `@endo/harden`, because that installs a harden implementation and `lockdown` then throws.
   It freezes the constructor, prototype, and statics, and leaves hardening to `lockdown`.
 - The shim does not depend on `@endo/pass-style`.
@@ -153,8 +170,9 @@ The remaining packaging decisions of layer 1 carry over unchanged.
 
 ### Pass style
 
-`@endo/pass-style` gains `'parcel'` as a `PassStyle`, with a `ParcelHelper` whose `confirmCanBeValid` is `Parcel.isParcel(candidate)` when `Parcel` is defined.
-The helper is registered ahead of the remotable helper, because a parcel is frozen with no own properties and would otherwise be rejected as an object with no methods.
+`@endo/pass-style` gains `'parcel'` as a `PassStyle`.
+The in-flight layer 3 does not register a SturdyRef helper in `HelperTable`; `passStyleOf.js` calls `isSturdyRefObject` immediately before its remotable fallback.
+The pivot preserves that proven ordering under the name `isParcelObject`, returning `'parcel'` before a frozen empty Parcel can be rejected as an object with no methods.
 `Parcel.prototype` must not carry a `PASS_STYLE` tag.
 The brand check is the only recognition path.
 
@@ -181,6 +199,14 @@ A relay may instead translate the inline representation into a protocol slot whe
 Syrup and CBOR tentatively retain the existing `ocapn-sturdyref` record.
 Their protocol codec translates that structured locator to and from a parcel rather than delegating this representation to generic marshal.
 
+The generic marshal does not receive location authority ambiently.
+Its `encodeParcel*` callback is installed only by a trusted owner that holds `%InitialParcel%`, and its `decodeParcel*` callback supplies the open hook appropriate for that transport or location resolver.
+The decoder rejects an inline Parcel encoding when no resolver is supplied.
+This keeps `@endo/marshal` ignorant of location grammar and prevents an unprivileged caller from turning a Parcel into a string merely by selecting a public serializer.
+The ordered passable encoding keeps the existing `t` category prefix, renamed
+from `sturdyRef` to `parcel`.
+All Parcels remain tied in rank because they have no pass-invariant equality.
+
 ### CapTP and OCapN
 
 OCapN is trusted code that is endowed `%InitialParcel%`.
@@ -194,7 +220,7 @@ OCapN is trusted code that is endowed `%InitialParcel%`.
   A non-normative mapping from the OCapN data model to Endo may mention parcels.
 
 Because every OCapN instance in the process shares one constructor, a parcel built by one instance can be located, serialized, and opened by another.
-Under the layer-1 contract, only the minting CapTP could serialize a ref, because only it held the table, and carrying a ref through a second CapTP was left as a protocol-compatibility question.
+Under the old layer-1 contract, only the minting CapTP could serialize a ref, because only it held the table, and carrying a ref through a second CapTP was left as a protocol-compatibility question.
 `locate` on the initial constructor is what lets a trusted forwarder carry a parcel that it did not mint, while a confined guest still cannot read it.
 The authority is necessary because `Parcel` sits beneath any particular OCapN instance: multiple later instances must be able to recognize and forward one another's parcels without giving the location to confined code.
 
@@ -203,6 +229,10 @@ The likely OCapN-layer spelling is a URL fragment whose fields parse as `URLSear
 Such a fragment can be appended to any HTTPS URL in a federation: software without OCapN support follows the HTTPS location, while OCapN-aware software intercepts the fragment and avoids pinging a potentially untrusted federated host.
 This scheme assumes that the first introduction to a capability comes from a trustworthy source and that operating-system OCapN hooks handle later uses.
 The OCapN layer, not the Parcel contract, will settle that grammar.
+
+The in-flight CapTP-specific `s+` / `s-` slot kind is therefore not renamed to `d+` / `d-` for ordinary carriage.
+Direct Parcel carriage uses the inline marshal representation and survives the carrying connection.
+A relay may introduce a connection-bound slot only when it intentionally translates that slot back into a durable location; that is relay policy, not the Parcel encoding.
 
 ### Provenance
 
@@ -251,7 +281,7 @@ That shared shape is why the shim follows the `HandledPromise` pattern, and why 
 | Eventual-send spelling | `E.enliven` adopted | `E.open` | retain the convenience spelling under the Parcel vocabulary; `E.enliven` is not entrenched |
 | Hook timing | later turn | later turn, unchanged | an `async` function body runs synchronously until its first `await`, so the implementation must defer explicitly |
 | Hook call form | `enliven.call(handler, ref, locator)` | `open.call(undefined, location, parcel)` | no handler object, so no receiver |
-| Location access | locator never reachable; only the minting CapTP's side table serializes | `Parcel.locate` on `%InitialParcel%` only | lets a trusted forwarder serialize parcels it did not mint, while guests cannot read them |
+| Location access | locator never reachable; only the minting CapTP's side table serializes | `Parcel.locate` on `%InitialParcel%` only; throws for a non-Parcel | lets a trusted forwarder serialize parcels it did not mint, while guests cannot read them; throwing keeps a narrow `string` result |
 | Authority | one constructor; propagation decided by layer 2 | initial and shared constructors | the missing powerless variant is what layer 2's propagation decision needs |
 | Brand check | `SturdyRef.isSturdyRef` | `Parcel.isParcel` | unchanged in kind |
 | First-wins packaging, harden-if-present, no pass-style dependency | as described | unchanged | settled by layer 1 |
@@ -259,17 +289,45 @@ That shared shape is why the shim follows the `HandledPromise` pattern, and why 
 
 ## The Layer Map After the Rename
 
-1. `@endo/parcel` shim contract (#1389, #774).
-2. SES: permits, `tame-parcel-constructor`, propagate `%SharedParcel%` (#1391).
-3. Pass style: `'parcel'` (#1392).
-4. Marshal: inline Parcel encodings for CapData and Smallcaps (#1393).
-5. CapTP: mint parcels and carry them on the wire; OCapN supplies the hook and reads `locate` (#1394).
-6. CapTP: construct a parcel from data (#1396).
-7. OCapN: open through the bootstrap and nonce locator (#1397).
-8. Daemon: a parcel for a formula, without incarnating it (#1398).
-9. Agent API (#1399, #695, #871).
+| Layer | Draft | Rename and behavior change |
+|---|---|---|
+| 1 | #1389, based on #774 | Replace `@endo/sturdyref` and `SturdyRef` with `@endo/parcel` and `Parcel`; use the single `open` hook; expose `open`, `isParcel`, and initial-only `locate`; add `E.open`; preserve later-turn dispatch and first-shim-wins installation. |
+| 2 | #1391 | Replace the single SES accommodation with `%InitialParcel%` and `%SharedParcel%`, derived like `%SharedURL%`; withhold `locate` from children and harden both constructors at lockdown. |
+| 3 | #1392 | Rename the pass style to the literal `'parcel'` and the special pre-remotable brand check to `isParcelObject`; do not add a helper or prototype tag. |
+| 4 | #1393 | Replace slot-index CapData and Smallcaps forms with the inline `@qclass: 'parcel'` plus location and apostrophe plus location forms; retain the ordered `t` category with no meaningful order within it. |
+| 5 | #1394 | Do not rename `s+` / `s-` to `d+` / `d-`; ordinary Parcel carriage is inline and transport callbacks hold locate/open authority. A relay-specific durable slot remains a separate policy. |
+| 6 | #1396 | Rename `makeSturdyRef` to `makeParcel`, construct from received location data with the connection's open hook, and remove the private minting-connection serialization restriction. |
+| 7 | #1397 | Rename the JavaScript object and helpers to Parcel; remove the transitional private coordinates table in favor of privileged `locate`; open through bootstrap and nonce location; preserve `ocapn-sturdyref` on the wire. |
+| 8 | #1398 | Rename daemon locator/formula helpers to Parcel and return a dormant formula Parcel without incarnating it; keep provenance checks at the daemon boundary. |
+| 9 | #1399 | Rename the agent and worker API to Parcel and `open`; base it on the canonical contract here. The worker-retention, named-call, tool-consumer, and weak-import ownership questions remain review gates. |
 
 The retention and revocation questions in [`sturdy-refs-endor-syscall.md`](sturdy-refs-endor-syscall.md) (who keeps a parcel alive in a worker, and how the user revokes it) are unchanged by the rename and remain inputs to layer 8.
+
+## Dependencies
+
+| Dependency | Kind | What this design takes from it |
+|---|---|---|
+| #774 | precedent | First-shim-wins installation, later-turn opening, and a shared realm-wide brand. |
+| #1389 | layer 1 draft | The shim contract this design renames and supersedes where the surface differs. |
+| #1391–#1399 | implementation stack | Nine ordered layers that must consume the contract and layer map above. |
+| #695, #697, #511, #539, #1404 | related designs | Retention, revocation, daemon, and guest-boundary requirements; their old SturdyRef spellings are prior art, not the canonical contract. |
+| `%SharedURL%` | SES precedent | A powered initial constructor and a shared constructor with the same prototype but less authority. |
+
+## Ownership map
+
+| Concern | Owner | Why |
+|---|---|---|
+| Brand, hidden location, open hook, first-wins selection | `@endo/parcel` | One realm-wide table must define what a Parcel is. |
+| Initial/shared split and lockdown hardening | `@endo/ses` | SES decides which globals and authorities each compartment receives. |
+| Pass-style recognition and generic representations | `@endo/pass-style`, `@endo/marshal` | These packages classify and encode language-level passables without understanding location grammar. |
+| Location interpretation and `ocapn-sturdyref` records | `@endo/ocapn` | OCapN owns its protocol grammar, connections, and interoperable wire form. |
+| Formula construction, provenance, retention, revocation | daemon and worker boundary | These are application lifetime and trust decisions, not language-primitive semantics. |
+
+The boundary rule is that only trusted transport or daemon code receives
+`%InitialParcel%` or an equivalent encode callback.
+Moving `locate` into a generic serializer or `%SharedParcel%` would silently move
+cryptographic-location authority across that boundary and is therefore out of
+scope for an implementation convenience.
 
 ## Objections
 

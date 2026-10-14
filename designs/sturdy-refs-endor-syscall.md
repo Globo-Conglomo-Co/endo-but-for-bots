@@ -3,9 +3,15 @@
 | | |
 |---|---|
 | **Created** | 2026-06-23 |
-| **Updated** | 2026-06-26 |
+| **Updated** | 2026-10-14 |
 | **Author** | endolinbot (prompted) |
-| **Status** | Not Started |
+| **Status** | Superseded |
+
+> **Superseded:** [`parcel.md`](parcel.md) is the canonical language-level
+> contract and layer map.
+> This document remains prior art for the unresolved worker-retention and user
+> revocation questions; its `SturdyRef` names and pass/marshal representation
+> are not implementation instructions.
 
 ## Summary
 
