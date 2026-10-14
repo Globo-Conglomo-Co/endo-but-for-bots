@@ -35,7 +35,7 @@ const ask = (op, args = {}) => new Promise((resolve, reject) => {
   child.stdin.write(`${JSON.stringify({ id, op, ...args })}\n`);
 });
 const cases = [
-  { name: 'composition', increment: 9, prompt: 'Call the add tool with 4, then call it with 5. Give the resulting total.' },
+  { name: 'composition', increment: 4, prompt: 'Call add with 4. Store the returned total as a decimal string under key "composition-result" using remember. Call recall with that key. Answer with the recalled value.' },
   { name: 'invalid-recovery', increment: 2, prompt: 'Call the add tool with 2, then give the resulting total.' },
   { name: 'durable-continue', increment: 7, prompt: 'Call the add tool with 7, then give the resulting total.' },
 ];
@@ -61,14 +61,25 @@ const runCell = async index => {
   }
   const after = await ask('toolRead');
   const history = outcome.turn.history || [];
-  const toolCalls = history.filter(item => item.action?.name === 'add').length;
+  const actions = history.filter(item => item.action).map(item => item.action);
   const invalidFeedback = history.filter(item => item.invalidAction).length;
+  const expectedActions = entry.name === 'composition'
+    ? [{ name: 'add', args: [4] },
+      { name: 'remember', args: ['composition-result', String(after)] },
+      { name: 'recall', args: ['composition-result'] }]
+    : [{ name: 'add', args: [entry.increment] }];
+  const exactActions = JSON.stringify(actions.map(({ name, args }) => ({ name, args }))) ===
+    JSON.stringify(expectedActions);
+  const note = entry.name === 'composition' ? await ask('noteRead', { key: 'composition-result' }) : undefined;
+  const recalled = history.find(item => item.action?.name === 'recall')?.value;
   const passed = outcome.turn.phase === 'done' && after - before === entry.increment &&
-    (entry.name === 'composition' ? toolCalls === 2 : toolCalls === 1) &&
+    exactActions &&
+    (entry.name === 'composition' ? note?.value === String(after) &&
+      recalled?.value === String(after) && outcome.turn.answer.includes(String(after)) : true) &&
     (entry.name === 'invalid-recovery' ? invalidFeedback >= 1 : true) &&
     (entry.name === 'durable-continue' ? paused?.turn.phase === 'paused' : true);
   const record = { round, case: entry.name, passed, phase: outcome.turn.phase,
-    toolCalls, invalidFeedback, toolDelta: after - before,
+    actions, invalidFeedback, toolDelta: after - before,
     operationMs: outcome.operationMs, pausedPhase: paused?.turn.phase,
     restartMs: restarted?.restartMs };
   results.push(record);

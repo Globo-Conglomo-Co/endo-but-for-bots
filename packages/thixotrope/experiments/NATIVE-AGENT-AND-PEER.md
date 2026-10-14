@@ -12,8 +12,8 @@ also works with an exact-revision copy of the release worker binary.
 Run `node packages/thixotrope/experiments/native-agent-smoke.mjs` for a real
 Ironhorse supervisor with a **scripted model**. The agent loop is the installed
 `native-agent-guest.mjs` object in its own vat. It receives only a model facet
-and an add-tool facet. The model broker and add tool are separate installed
-vats. The host handles process lifecycle and provides the model facet; it
+an add-tool facet, and a notes facet. The broker, add tool, and notes store are
+separate installed vats. The host handles process lifecycle and provides the model facet; it
 does not choose actions or call the tool. The tool uses a per-step idempotency
 key. The agent stores its turn phase and history in the Ironhorse heap.
 
@@ -22,14 +22,17 @@ has a numeric `id` for the response and an `op`. Supported operations are:
 
 - `start {statePath?}` starts a private supervisor. An omitted path is owned
   and removed by `close`.
-- `provision` installs the model broker, add tool, and agent.
+- `provision` installs the model broker, add tool, notes store, and agent.
 - `bindModel {model:{kind:"scripted",responses:[...]}}` binds a finite test
-  sequence. Actions are `{kind:"tool",name:"add",args:[integer]}` or
-  `{kind:"answer",text:"..."}`. A scripted action can have `delayMs` for
+  sequence. Actions are `{kind:"tool",name:"add",args:[integer]}`,
+  `{kind:"tool",name:"remember",args:[key,string]}`,
+  `{kind:"tool",name:"recall",args:[key]}`, or `{kind:"answer",text:"..."}`.
+  A scripted action can have `delayMs` for
   cancellation tests.
 - `bindModel {model:{kind:"local-http",baseUrl:"http://127.0.0.1:8003",
   model:"default"}}` binds an explicit OpenAI-compatible local model endpoint.
-  The driver accepts only plain localhost HTTP without credentials. The host
+  The driver accepts plain localhost HTTP or the explicit `tinix:8003` local
+  model host, without credentials. The host
   sends a JSON-action instruction to `/v1/chat/completions`, then passes the
   parsed action to the guest model facet. The caller chooses the endpoint and
   model. No remote or paid model is configured by default.
@@ -37,24 +40,25 @@ has a numeric `id` for the response and an `op`. Supported operations are:
   before the first real model call. This tests the guest's invalid-action
   feedback and repair path; it is a scripted fault, not a model mistake.
 - `run {turnId,prompt,maxSteps?}`, `status {turnId}`, `cancel {turnId}`,
-  `toolRead`, `restart`, and `close` act on the installed objects. Responses
+  `toolRead`, `noteRead {key}`, `restart`, and `close` act on the installed objects. Responses
   are `{id,ok,value}` or `{id,ok:false,error:{message}}`; concurrent requests
   can return out of order. `run` returns a bounded turn state and elapsed time.
 
-`maxSteps` is 1–8. The model call has a 30-second HTTP timeout. Cancellation
+`maxSteps` is 1–8. The local model request limits output to 4096 tokens, turns
+off hidden thinking, and has a 360-second HTTP timeout. Cancellation
 marks the guest turn and aborts an active model call. The host cannot safely
 infer whether a disconnected call completed, so it does not replay it.
 The guest checkpoints a tool action before calling the idempotent tool. A
 `waiting-model` checkpoint can request the model again after restart if the
 caller explicitly calls `run` again; that can spend another model call.
-An invalid model action adds bounded feedback without invoking the tool. A
+An invalid model action adds bounded feedback without invoking either tool. A
 turn that reaches its step bound is `paused`; the caller can increase
 `maxSteps` and call `run` again, including after restart.
 
 `native-agent-local-trial.mjs` is an opt-in local Qwen path. Set
 `NATIVE_MODEL_URL` and `NATIVE_MODEL_ID`, then run the script only while the
 local model owner reserves the GPU. It runs four ordered repeats of three
-tasks: two-tool composition, forced invalid-action recovery followed by a
+tasks: add→remember→recall composition across two capabilities, forced invalid-action recovery followed by a
 real model decision, and a one-step pause followed by supervisor restart and
 model rebind. It records every cell as pass or fail; it does not assume the
 model will choose the requested tool. Set `NATIVE_REPEATS=1` for a quick pilot.

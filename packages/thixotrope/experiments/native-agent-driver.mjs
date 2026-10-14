@@ -77,8 +77,11 @@ const validateModel = spec => {
   if (spec?.kind === 'local-http' && typeof spec.model === 'string' &&
       typeof spec.baseUrl === 'string') {
     const url = new URL(spec.baseUrl);
-    if (url.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
-        url.username || url.password) throw Error('Model endpoint must be plain local HTTP without credentials');
+    if (url.protocol !== 'http:' ||
+        !['localhost', '127.0.0.1', '[::1]', 'tinix'].includes(url.hostname) ||
+        (url.hostname === 'tinix' && url.port !== '8003') ||
+        url.username || url.password || url.search || url.hash)
+      throw Error('Model endpoint must be the explicit local HTTP host without credentials');
     if (spec.injectInvalidOnce !== undefined && typeof spec.injectInvalidOnce !== 'boolean')
       throw Error('injectInvalidOnce must be a boolean');
     return { kind: spec.kind, model: spec.model, baseUrl: url.href, injectInvalidOnce: !!spec.injectInvalidOnce };
@@ -111,17 +114,18 @@ const hostComplete = async request => {
     return harden(action);
   }
   modelAbort = new AbortController();
-  const timer = setTimeout(() => modelAbort?.abort(), 30_000);
+  const timer = setTimeout(() => modelAbort?.abort(), 360_000);
   try {
     const url = new URL('/v1/chat/completions', modelConfig.baseUrl);
     const messages = [
-      { role: 'system', content: 'Return one JSON object only: {"kind":"tool","name":"add","args":[integer]} or {"kind":"answer","text":"..."}. Use the add tool when arithmetic needs it. No markdown.' },
+      { role: 'system', content: 'You have exactly three actions on two granted capabilities: {"kind":"tool","name":"add","args":[integer]} adds to a persistent total and returns that total; {"kind":"tool","name":"remember","args":[key,string]} stores a note and returns its key/value; {"kind":"tool","name":"recall","args":[key]} reads a stored note and returns its key/value; {"kind":"answer","text":"..."} ends the turn. Return ONE JSON object only, with no markdown. Use history tool results to choose the next action. If history says an action was invalid, correct it.' },
       { role: 'user', content: JSON.stringify(request) },
     ];
     const response = await globalThis.fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: modelConfig.model, messages, temperature: 0 }),
+      body: JSON.stringify({ model: modelConfig.model, messages, temperature: 0,
+        max_tokens: 4096, chat_template_kwargs: { enable_thinking: false } }),
       signal: modelAbort.signal,
     });
     if (!response.ok) throw Error(`Local model HTTP ${response.status}`);
@@ -161,8 +165,9 @@ const operations = {
     const facet = await invoke('native-model-broker', 'model');
     await needClient().call('keep', 'native-model-facet', facet);
     await installFile('native-add-tool', './native-tool-guest.mjs');
+    await installFile('native-notes-tool', './native-notes-guest.mjs');
     await installFile('native-agent', './native-agent-guest.mjs', [
-      ['model', 'native-model-facet'], ['tool', 'native-add-tool'],
+      ['model', 'native-model-facet'], ['tool', 'native-add-tool'], ['notes', 'native-notes-tool'],
     ]);
     return { provisioned: true, provisionMs: Math.round(performance.now() - before) };
   },
@@ -183,6 +188,7 @@ const operations = {
     return cancelled;
   },
   async toolRead() { return invoke('native-add-tool', 'read'); },
+  async noteRead({ key }) { return invoke('native-notes-tool', 'read', [key]); },
   async restart() {
     needClient();
     const path = statePath;

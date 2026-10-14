@@ -43,6 +43,10 @@ const responses = [
   { kind: 'answer', text: 'must be cancelled', delayMs: 5000 },
   { kind: 'tool', name: 'add', args: [6] },
   { kind: 'answer', text: 'The resumed total is 13.' },
+  { kind: 'tool', name: 'add', args: [2] },
+  { kind: 'tool', name: 'remember', args: ['mixed-result', '15'] },
+  { kind: 'tool', name: 'recall', args: ['mixed-result'] },
+  { kind: 'answer', text: 'The stored result is 15.' },
 ];
 try {
   const processStart = performance.now();
@@ -82,6 +86,17 @@ try {
   assert.equal(resumed.turn.phase, 'done');
   assert.equal(resumed.turn.history.length, 1, 'the tool did not repeat after restart');
   assert.equal(await ask('toolRead'), 13);
+  const mixed = await ask('run', { turnId: 'mixed',
+    prompt: 'Add two, remember the total, recall the note, then answer.', maxSteps: 4 });
+  assert.equal(mixed.turn.phase, 'done');
+  assert.deepEqual(mixed.turn.history.map(item => item.action?.name), ['add', 'remember', 'recall']);
+  assert.deepEqual(mixed.turn.history[1].value, { key: 'mixed-result', value: '15' });
+  assert.deepEqual(mixed.turn.history[2].value, { key: 'mixed-result', value: '15' });
+  assert.equal(await ask('toolRead'), 15);
+  assert.deepEqual(await ask('noteRead', { key: 'mixed-result' }), { key: 'mixed-result', value: '15' });
+  await ask('restart');
+  assert.deepEqual(await ask('noteRead', { key: 'mixed-result' }), { key: 'mixed-result', value: '15' });
+  assert.equal((await ask('status', { turnId: 'mixed' })).phase, 'done');
   const closed = await ask('close');
   assert.equal(closed, true);
   console.log(JSON.stringify({

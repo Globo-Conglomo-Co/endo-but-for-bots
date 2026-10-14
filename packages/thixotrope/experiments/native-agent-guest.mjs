@@ -4,9 +4,20 @@
 // bundled for SES, so its type comments must contain no import syntax.
 const { Far, E } = /** @type {{ Far: (name: string, methods: object) => any, E: (ref: any) => any }} */ (/** @type {unknown} */ (globalThis));
 
-export const make = ({ model, tool }) => {
+export const make = ({ model, tool, notes }) => {
   const turns = new Map();
   const copy = row => harden({ ...row, history: [...row.history] });
+  const validAction = action => {
+    if (action?.kind !== 'tool' || !Array.isArray(action.args)) return false;
+    if (action.name === 'add') return action.args.length === 1 &&
+      Number.isSafeInteger(action.args[0]) && Math.abs(action.args[0]) <= 1000;
+    if (action.name === 'remember') return action.args.length === 2 &&
+      typeof action.args[0] === 'string' && action.args[0].length > 0 && action.args[0].length <= 80 &&
+      typeof action.args[1] === 'string' && action.args[1].length <= 500;
+    if (action.name === 'recall') return action.args.length === 1 &&
+      typeof action.args[0] === 'string' && action.args[0].length > 0 && action.args[0].length <= 80;
+    return false;
+  };
   /** @returns {Promise<any>} */
   const advance = async (row, id, prompt, maxSteps) => {
     if (row.cancelled) {
@@ -22,7 +33,10 @@ export const make = ({ model, tool }) => {
       // same idempotency key in the separate tool vat.
       const action = row.action;
       let value;
-      try { value = await E(tool).call(action.name, action.args, `${id}:${row.steps}`); }
+      try {
+        const target = action.name === 'add' ? tool : notes;
+        value = await E(target).call(action.name, action.args, `${id}:${row.steps}`);
+      }
       catch (error) {
         row.phase = row.cancelled ? 'cancelled' : 'error';
         row.error = (error instanceof Error ? error.message : String(error)).slice(0, 300);
@@ -51,10 +65,8 @@ export const make = ({ model, tool }) => {
       row.phase = 'done';
       return copy(row);
     }
-    if (action?.kind !== 'tool' || action.name !== 'add' ||
-        !Array.isArray(action.args) || action.args.length !== 1 ||
-        !Number.isSafeInteger(action.args[0]) || Math.abs(action.args[0]) > 1000) {
-      row.history.push(harden({ invalidAction: 'Only add(integer) is granted; choose add or answer.' }));
+    if (!validAction(action)) {
+      row.history.push(harden({ invalidAction: 'Granted actions: add(integer), remember(key,string), recall(key), or answer.' }));
       row.steps += 1;
       row.phase = 'model';
       return advance(row, id, prompt, maxSteps);
