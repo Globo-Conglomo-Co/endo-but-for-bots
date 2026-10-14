@@ -62,6 +62,12 @@ tasks: add→remember→recall composition across two capabilities, forced inval
 real model decision, and a one-step pause followed by supervisor restart and
 model rebind. It records every cell as pass or fail; it does not assume the
 model will choose the requested tool. Set `NATIVE_REPEATS=1` for a quick pilot.
+The summary reports both the Thix base revision and the current experiment
+commit. Set `NATIVE_MODEL_TRACE=1` only for an approved diagnostic run to
+write each model request, raw HTTP response, parsed action, and elapsed time
+to the driver's stderr. These trace records include the full prompt and model
+output. The default condensed result records accepted actions and counts of
+rejected actions, but cannot reconstruct the rejected action body.
 
 Run `node packages/thixotrope/experiments/native-peer-smoke.mjs` for **two
 independent supervisor processes**. Alice sends a live installed capability

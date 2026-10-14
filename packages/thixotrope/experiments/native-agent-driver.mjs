@@ -32,7 +32,12 @@ let modelConfig;
 let scriptCursor = 0;
 let modelAbort;
 let injectInvalidPending = false;
+let modelCallId = 0;
 const activeTurns = new Set();
+const modelTrace = record => {
+  if (process.env.NATIVE_MODEL_TRACE === '1')
+    console.error(JSON.stringify({ nativeModelTrace: record }));
+};
 
 const reply = (id, payload) => process.stdout.write(`${JSON.stringify({ id, ...payload })}\n`);
 const needClient = () => {
@@ -90,9 +95,13 @@ const validateModel = spec => {
 };
 const hostComplete = async request => {
   if (!modelConfig) throw Error('Model is not bound');
+  modelCallId += 1;
+  const callId = modelCallId;
   if (injectInvalidPending) {
     injectInvalidPending = false;
-    return harden({ kind: 'tool', name: 'unsupported-test-action', args: [1] });
+    const action = harden({ kind: 'tool', name: 'unsupported-test-action', args: [1] });
+    modelTrace({ callId, origin: 'injected-invalid-action', request, action });
+    return action;
   }
   if (modelConfig.kind === 'scripted') {
     if (scriptCursor >= modelConfig.responses.length) throw Error('Scripted model exhausted');
@@ -111,28 +120,42 @@ const hostComplete = async request => {
         });
       } finally { modelAbort = undefined; }
     }
+    modelTrace({ callId, origin: 'scripted', request, action });
     return harden(action);
   }
   modelAbort = new AbortController();
   const timer = setTimeout(() => modelAbort?.abort(), 360_000);
+  const startedAt = performance.now();
   try {
     const url = new URL('/v1/chat/completions', modelConfig.baseUrl);
     const messages = [
       { role: 'system', content: 'You have exactly three actions on two granted capabilities: {"kind":"tool","name":"add","args":[integer]} adds to a persistent total and returns that total; {"kind":"tool","name":"remember","args":[key,string]} stores a note and returns its key/value; {"kind":"tool","name":"recall","args":[key]} reads a stored note and returns its key/value; {"kind":"answer","text":"..."} ends the turn. Return ONE JSON object only, with no markdown. Use history tool results to choose the next action. If history says an action was invalid, correct it.' },
       { role: 'user', content: JSON.stringify(request) },
     ];
+    const body = { model: modelConfig.model, messages, temperature: 0,
+      max_tokens: 4096, chat_template_kwargs: { enable_thinking: false } };
+    modelTrace({ callId, origin: 'local-http', phase: 'request', url: url.href, body });
     const response = await globalThis.fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: modelConfig.model, messages, temperature: 0,
-        max_tokens: 4096, chat_template_kwargs: { enable_thinking: false } }),
+      body: JSON.stringify(body),
       signal: modelAbort.signal,
     });
+    const rawResponse = await response.text();
+    modelTrace({ callId, origin: 'local-http', phase: 'response',
+      status: response.status, elapsedMs: Math.round(performance.now() - startedAt), rawResponse });
     if (!response.ok) throw Error(`Local model HTTP ${response.status}`);
-    const body = await response.json();
-    const content = body?.choices?.[0]?.message?.content;
+    const decoded = JSON.parse(rawResponse);
+    const content = decoded?.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.length > 8000) throw Error('Invalid local model response');
-    return harden(JSON.parse(content));
+    const action = JSON.parse(content);
+    modelTrace({ callId, origin: 'local-http', phase: 'action', action });
+    return harden(action);
+  } catch (error) {
+    modelTrace({ callId, origin: 'local-http', phase: 'error',
+      elapsedMs: Math.round(performance.now() - startedAt),
+      message: error instanceof Error ? error.message : String(error) });
+    throw error;
   } finally {
     clearTimeout(timer);
     modelAbort = undefined;

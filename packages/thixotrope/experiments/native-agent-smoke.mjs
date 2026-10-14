@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { createServer } from 'node:http';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
 import { setTimeout } from 'node:timers';
@@ -9,6 +10,7 @@ import { setTimeout } from 'node:timers';
 const child = spawn(process.execPath, [new URL('./native-agent-driver.mjs', import.meta.url).pathname], {
   stdio: ['pipe', 'pipe', 'inherit'],
 });
+let stub;
 const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 const pending = new Map();
 lines.on('line', line => {
@@ -97,6 +99,30 @@ try {
   await ask('restart');
   assert.deepEqual(await ask('noteRead', { key: 'mixed-result' }), { key: 'mixed-result', value: '15' });
   assert.equal((await ask('status', { turnId: 'mixed' })).phase, 'done');
+  const modelRequests = [];
+  stub = createServer(async (request, response) => {
+    let raw = '';
+    for await (const chunk of request) raw += chunk;
+    modelRequests.push({ path: request.url, headers: request.headers, body: JSON.parse(raw) });
+    const action = modelRequests.length === 1
+      ? { kind: 'tool', name: 'add', args: [1] }
+      : { kind: 'answer', text: 'The new total is 16.' };
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(action) } }] }));
+  });
+  await new Promise(resolve => stub.listen(0, '127.0.0.1', resolve));
+  const address = stub.address();
+  if (!address || typeof address === 'string') throw Error('Expected localhost test server port');
+  await ask('bindModel', { model: { kind: 'local-http',
+    baseUrl: `http://127.0.0.1:${address.port}`, model: 'stub' } });
+  const local = await ask('run', { turnId: 'local-stub', prompt: 'Add one, then answer.' });
+  assert.equal(local.turn.phase, 'done');
+  assert.equal(local.turn.history[0].value, 16);
+  assert.equal(modelRequests.length, 2);
+  assert.equal(modelRequests[0].path, '/v1/chat/completions');
+  assert.equal(modelRequests[0].body.max_tokens, 4096);
+  assert.deepEqual(modelRequests[0].body.chat_template_kwargs, { enable_thinking: false });
+  assert.equal(modelRequests[0].headers.authorization, undefined);
   const closed = await ask('close');
   assert.equal(closed, true);
   console.log(JSON.stringify({
@@ -111,6 +137,7 @@ try {
     afterRestartOperationMs: after.operationMs,
   }));
 } finally {
+  stub?.close();
   child.stdin.end();
   child.kill('SIGTERM');
 }

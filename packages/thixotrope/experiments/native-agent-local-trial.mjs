@@ -1,12 +1,16 @@
 // Opt-in local-model trial. Run only when the local model owner reserves the GPU.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const baseUrl = process.env.NATIVE_MODEL_URL;
 const model = process.env.NATIVE_MODEL_ID;
 const repeats = Number(process.env.NATIVE_REPEATS || 4);
+const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
+const experimentRevision = execFileSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'],
+  { encoding: 'utf8' }).trim();
 if (!baseUrl || !model || !Number.isInteger(repeats) || repeats < 1 || repeats > 4)
   throw Error('Set NATIVE_MODEL_URL and NATIVE_MODEL_ID; NATIVE_REPEATS must be 1–4');
 
@@ -92,7 +96,8 @@ try {
   await runCell(0);
   assert.equal(results.length, 3 * repeats);
   console.log(JSON.stringify({ summary: {
-    sourceRevision: '5a40d85326cf94cecf3f34acb703a8681fdbc14a',
+    thixBaseRevision: '5a40d85326cf94cecf3f34acb703a8681fdbc14a',
+    experimentRevision,
     model, baseUrl, repeats, cells: results.length,
     passed: results.filter(result => result.passed).length,
     coldStartupMs: started.startupMs, provisionMs: provisioned.provisionMs,
