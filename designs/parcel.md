@@ -3,6 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-10-14 |
+| **Updated** | 2026-10-14 |
 | **Author** | Kris Kowal (prompted) |
 | **Status** | Proposed |
 
@@ -31,7 +32,7 @@ Programs need a third kind of reference.
 - A **dormant** reference names a capability without manifesting it.
   It survives partition, restart, and storage.
   It can be woken once or many times by someone who can reach the peer that vouches for it.
-  Neither of the other two kinds can be this, and the codebase keeps approximating it with whichever is nearest.
+  Neither of the other two kinds can be this, and the codebase tentatively approximates it with whichever is nearest, either a remotable or tagged data, and neither is suitable for Distributed Confinement or durable across partition.
 
 E called the dormant kind a SturdyRef.
 "Sturdy" names one property, durability, and not what the thing is.
@@ -39,7 +40,7 @@ The word has since spread over three different things:
 
 | People say "sturdyref" and mean | What it is |
 |---|---|
-| the bytes of an `ocapn://…/s/…` URI | a **locator**: data, copyable, dangerous to leak |
+| the bytes of an `ocapn://.../s/...` URI | a **locator**: data, copyable, dangerous to leak |
 | the object a program holds and passes | a **box** around a locator, opaque, with a way to open it |
 | the capability obtained after fetching | a **target**: a live reference with a different lifetime |
 
@@ -81,6 +82,7 @@ Parcel.locate(parcel);      // string, present on %InitialParcel% only
   It must not be collapsed into `instanceof`, because a prototype chain can be forged with `Object.create`.
 - `Parcel.locate(parcel)` returns the location string.
   It exists only on `%InitialParcel%` (below).
+  A non-parcel argument throws a `TypeError` synchronously, exposing a failed invariant rather than returning an optional value that every caller must narrow.
 
 The `open` hook receives the parcel as a second argument so that one hook function can serve many parcels and still apply identity-keyed policy.
 
@@ -134,13 +136,16 @@ An absent `Parcel` is not an error, so hosts that never installed the shim keep 
 
 ### Packaging
 
-The packaging decisions of layer 1 carry over unchanged.
+The shim package is `@endo/parcel`.
+The remaining packaging decisions of layer 1 carry over unchanged.
 
 - A ponyfill (`index.js`) and an installing entry (`shim.js`).
 - First definer wins.
   `selectParcel` adopts an existing valid `globalThis.Parcel` (a function with `open`, `isParcel`, and `locate` statics) and installs its own only if none exists.
   Eval twins therefore share one constructor and one table.
-- The shim must run before `lockdown()` so that SES sees `Parcel` at `repairIntrinsics` time.
+- The defining shim must run before `lockdown()` so that SES sees `Parcel` at `repairIntrinsics` time.
+  A later evaluation of the shim, including one inside a compartment after `lockdown()`, races by shape-checking and adopting the constructor already visible there.
+  It neither replaces the winner nor rejects it based on a version or contract marker.
 - Before `lockdown()` the shim must not call `@endo/harden`, because that installs a harden implementation and `lockdown` then throws.
   It freezes the constructor, prototype, and statics, and leaves hardening to `lockdown`.
 - The shim does not depend on `@endo/pass-style`.
@@ -155,10 +160,26 @@ The brand check is the only recognition path.
 
 ### Marshal
 
-Marshal represents a parcel as a slot of a distinct kind, alongside remotable and promise slots, in each encoding.
-The location is not part of the encoding unless the marshal's owner holds `locate`.
-This is layer 4 of the stack and keeps its content from the existing plan.
-Non-OCapN CapTP transports are an open question below.
+A marshal whose owner holds `locate` represents a parcel as inline data.
+The original CapData format uses this encoding and no slot:
+
+```json
+{
+  "body": "{\"@qclass\":\"parcel\",\"location\":\"#ocapn=1&peer=ed25519hex&value=rand256hex\"}",
+  "slots": []
+}
+```
+
+Smallcaps reserves the apostrophe prefix for a parcel followed immediately by its location.
+For the same parcel, the complete CapData body is `#"'#ocapn=1&peer=ed25519hex&value=rand256hex"` with an empty `slots` array.
+Ordinary strings beginning with an apostrophe remain escaped by Smallcaps with `!`, so the representation is unambiguous.
+
+On decode, the marshal uses its supplied parcel maker to bind the location to that endpoint's `open` hook.
+A marshal without `locate` cannot encode a parcel.
+A relay may instead translate the inline representation into a protocol slot when the receiving protocol needs hosted identity, but a parcel does not occupy a slot merely to cross a marshal boundary.
+
+Syrup and CBOR tentatively retain the existing `ocapn-sturdyref` record.
+Their protocol codec translates that structured locator to and from a parcel rather than delegating this representation to generic marshal.
 
 ### CapTP and OCapN
 
@@ -169,12 +190,19 @@ OCapN is trusted code that is endowed `%InitialParcel%`.
   The hook establishes or reuses a session to the designated peer, fetches through the bootstrap, and returns the promise for the referent.
 - The **wire tag `ocapn-sturdyref` does not change.**
   It is defined by the OCapN specification and is how Goblins and other peers interoperate.
-  Only the JavaScript-facing name and object model change.
-  Whether the specification's prose should adopt the word "parcel" is a separate decision and is not required here.
+  The on-wire value is a structured capability locator, not a parcel, and the OCapN specification need not adopt the JavaScript-facing name.
+  A non-normative mapping from the OCapN data model to Endo may mention parcels.
 
 Because every OCapN instance in the process shares one constructor, a parcel built by one instance can be located, serialized, and opened by another.
 Under the layer-1 contract, only the minting CapTP could serialize a ref, because only it held the table, and carrying a ref through a second CapTP was left as a protocol-compatibility question.
 `locate` on the initial constructor is what lets a trusted forwarder carry a parcel that it did not mint, while a confined guest still cannot read it.
+The authority is necessary because `Parcel` sits beneath any particular OCapN instance: multiple later instances must be able to recognize and forward one another's parcels without giving the location to confined code.
+
+Parcel itself deliberately assigns no grammar to locations.
+The likely OCapN-layer spelling is a URL fragment whose fields parse as `URLSearchParams`, for example `#ocapn=1&peer=ed25519hex&value=rand256hex&at=transportAndAddress&at=transportAndAddress`.
+Such a fragment can be appended to any HTTPS URL in a federation: software without OCapN support follows the HTTPS location, while OCapN-aware software intercepts the fragment and avoids pinging a potentially untrusted federated host.
+This scheme assumes that the first introduction to a capability comes from a trustworthy source and that operating-system OCapN hooks handle later uses.
+The OCapN layer, not the Parcel contract, will settle that grammar.
 
 ### Provenance
 
@@ -220,7 +248,7 @@ That shared shape is why the shim follows the `HandledPromise` pattern, and why 
 | Name | `SturdyRef` | `Parcel` | the old name describes durability, not the object |
 | Construction | `new SturdyRef(handler, locator)` | `new Parcel(location, open)` | a handler object with one hook is a single function. A shared hook is a shared function. |
 | Revive | `SturdyRef.enliven(ref)` | `Parcel.open(parcel)` | "open" matches the box; "enliven" implies the referent is a live thing awakened, which it may not be |
-| Eventual-send spelling | `E.enliven` adopted | open question | the precedent of `E.resolve` argues for keeping a convenience spelling, but it adds an `@endo/eventual-send` dependency on the shim's name |
+| Eventual-send spelling | `E.enliven` adopted | `E.open` | retain the convenience spelling under the Parcel vocabulary; `E.enliven` is not entrenched |
 | Hook timing | later turn | later turn, unchanged | an `async` function body runs synchronously until its first `await`, so the implementation must defer explicitly |
 | Hook call form | `enliven.call(handler, ref, locator)` | `open.call(undefined, location, parcel)` | no handler object, so no receiver |
 | Location access | locator never reachable; only the minting CapTP's side table serializes | `Parcel.locate` on `%InitialParcel%` only | lets a trusted forwarder serialize parcels it did not mint, while guests cannot read them |
@@ -231,10 +259,10 @@ That shared shape is why the shim follows the `HandledPromise` pattern, and why 
 
 ## The Layer Map After the Rename
 
-1. `Parcel` shim contract (#1389, #774).
+1. `@endo/parcel` shim contract (#1389, #774).
 2. SES: permits, `tame-parcel-constructor`, propagate `%SharedParcel%` (#1391).
 3. Pass style: `'parcel'` (#1392).
-4. Marshal: a slot kind per encoding (#1393).
+4. Marshal: inline Parcel encodings for CapData and Smallcaps (#1393).
 5. CapTP: mint parcels and carry them on the wire; OCapN supplies the hook and reads `locate` (#1394).
 6. CapTP: construct a parcel from data (#1396).
 7. OCapN: open through the bootstrap and nonce locator (#1397).
@@ -249,7 +277,7 @@ The retention and revocation questions in [`sturdy-refs-endor-syscall.md`](sturd
   A string is copyable by whatever touches it, prints by default, and is indistinguishable from other strings.
   A parcel prints as an empty frozen object, has its own pass style, and keeps its location behind an authority.
 - **It is just a tagged record.**
-  Any code can call `makeTagged('ocapn-sturdyref', …)`.
+  Any code can call `makeTagged('ocapn-sturdyref', ...)`.
   A pass style backed by a shared brand makes the distinction real and process-wide.
 - **Renaming breaks OCapN interop.**
   The wire tag stays.
@@ -262,18 +290,18 @@ The retention and revocation questions in [`sturdy-refs-endor-syscall.md`](sturd
   A Parcel may be opened again and may yield something different.
   The name is chosen for the properties that are most often misunderstood: boxed, addressed, not yet manifest, carried by hands that cannot see inside.
 
-## Open questions
+## Design Decisions
 
-1. Is `Parcel.locate` on the initial constructor an acceptable replacement for layer 1's choice that no location is ever readable?
-   It is what lets a trusted forwarder serialize a parcel it did not mint, and it is the one new authority this design adds.
-2. Should the OCapN specification's prose adopt "parcel", or should the JavaScript-facing name diverge from the specification's "sturdyref" indefinitely?
-3. Package name: `@endo/parcel`, or keep `@endo/sturdyref` for the shim and rename only the exports?
-4. Keep `E.enliven` under a new name, such as `E.open`, or drop the eventual-send spelling?
-5. How does `@endo/marshal` encode a parcel for non-OCapN CapTP, where there is no `ocapn-sturdyref` record to reuse?
-6. What does a second shim of a different version do when it finds `globalThis.Parcel` already installed?
-   Layer 1 proposed a `contract` marker in the shape check if semantics ever change.
-7. Does `Parcel.locate` throw or return `undefined` for a non-parcel?
-   This design assumes it throws, matching `Parcel.open` rejecting.
+1. `%InitialParcel%` has `locate` because the realm-wide abstraction must sit beneath individual OCapN instances and let trusted instances recognize one another's parcels.
+2. Parcel is an Endo language representation, not an OCapN wire-model term.
+   The OCapN specification retains its structured capability locator and may describe the Endo mapping non-normatively.
+3. The package is `@endo/parcel`.
+4. Eventual send exposes `E.open`; `E.enliven` is replaced before it becomes entrenched.
+5. Smallcaps and CapData carry the location inline as specified above.
+   A relay may translate that data into a slot when its protocol requires one.
+6. Shim evaluation is a first-wins race.
+   Every later evaluation adopts the existing valid constructor, including after `lockdown()`, without imposing a version marker.
+7. `Parcel.locate` throws for a non-parcel, so successful return has the narrow `string` type and invariant failures surface immediately.
 
 ## Prompt
 
