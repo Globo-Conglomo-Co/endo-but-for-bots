@@ -14,6 +14,14 @@ with Node from the repository root to check the same behavior through a private 
 worker, application installation, and supervisor restart. The smoke owns and
 removes its temporary state.
 
+The follow-up admission change reads input code units directly from the guest
+string chunk, charging each read, then checks the host meter and heap ceiling
+before each encoded or decoded output expansion. It avoids a full temporary
+copy of a large input string. The large-input regression prepares
+its input in a prior guest crank, then arms a low budget for the URI call. It
+must halt near that budget without allocating a result string. The same test
+would return from the original URI implementation after doing all the work.
+
 Build the matching worker with `cargo build -p thixotrope-ironhorse-worker --release --locked`
 from the repository root, then run `yarn build:ironhorse-bundles` in
 `packages/thixotrope` before running the supervisor smoke. This change does not claim a complete Web API or browser intrinsic

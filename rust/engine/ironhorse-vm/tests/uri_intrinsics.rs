@@ -1,5 +1,5 @@
 //! URI globals must run inside the Ironhorse guest, including catchable errors.
-use ironhorse_vm::Interp;
+use ironhorse_vm::{Halt, Interp};
 
 fn guest(source: &str) -> String {
     let (bytecode, symbols) = ironhorse_compile::compile_atoms(source).expect("compile guest");
@@ -62,4 +62,55 @@ fn malformed_escapes_and_lone_surrogates_throw_catchable_uri_errors() {
             "{expression}"
         );
     }
+}
+
+#[test]
+fn large_uri_results_stop_before_unmetered_work_or_allocation() {
+    for expression in ["encodeURIComponent(payload)", "decodeURIComponent(payload)"] {
+        let input = if expression.starts_with("encode") {
+            "var payload='😀'.repeat(10000)"
+        } else {
+            "var payload='%F0%9F%98%80'.repeat(100000)"
+        };
+        let (first, names) = ironhorse_compile::compile_atoms(input).expect("compile input");
+        let mut vm = Interp::new();
+        vm.link_intrinsics(&ironhorse_vm::parse_symbols(&names));
+        assert!(vm.run(&first).completed, "prepare pre-existing input");
+        let (second, names) = ironhorse_compile::compile_atoms(expression).expect("compile call");
+        let second = vm
+            .relink_crank(&second, &ironhorse_vm::parse_symbols(&names))
+            .expect("relink call");
+        const LIMIT: u64 = 12;
+        vm.arm_meter(1, Box::new(|spent| spent <= LIMIT));
+        let before = vm.chunks().byte_size();
+        let out = vm.run(&second);
+        assert_eq!(out.halt, Halt::MeterAbort, "{expression}: {:?}", out.halt);
+        assert!(
+            out.computrons < LIMIT + 3,
+            "URI work ran ahead of the meter: {expression}: {}",
+            out.computrons
+        );
+        assert!(
+            vm.chunks().byte_size() < before + 4_096,
+            "URI result allocated before refusal: {expression}"
+        );
+    }
+}
+
+#[test]
+fn admitted_uri_work_has_the_same_meter_total_when_armed() {
+    let source = "encodeURIComponent('é😀漢 /?#') + decodeURIComponent('%C3%A9%F0%9F%98%80')";
+    let (code, names) = ironhorse_compile::compile_atoms(source).expect("compile guest");
+    let names = ironhorse_vm::parse_symbols(&names);
+    let mut plain = Interp::new();
+    plain.link_intrinsics(&names);
+    let plain_result = plain.run(&code);
+    assert!(plain_result.completed, "{:?}", plain_result.halt);
+    let mut armed = Interp::new();
+    armed.link_intrinsics(&names);
+    armed.arm_meter(1, Box::new(|_| true));
+    let armed_result = armed.run(&code);
+    assert!(armed_result.completed, "{:?}", armed_result.halt);
+    assert_eq!(armed_result.result, plain_result.result);
+    assert_eq!(armed.meter_index(), plain.meter_index());
 }
