@@ -1,7 +1,7 @@
 // Control and model facets have separate identities. The agent is granted only
 // model.complete; the operator rebinds control after a supervisor restart.
-/** @type {{ Far: typeof import('@endo/far').Far, E: typeof import('@endo/far').E }} */
-const { Far, E } = /** @type {{ Far: typeof import('@endo/far').Far, E: typeof import('@endo/far').E }} */ (/** @type {unknown} */ (globalThis));
+// The confined guest environment injects these two explicit language facets.
+const { Far, E } = /** @type {{ Far: (name: string, methods: object) => any, E: (ref: any) => any }} */ (/** @type {unknown} */ (globalThis));
 
 export const make = () => {
   let host;

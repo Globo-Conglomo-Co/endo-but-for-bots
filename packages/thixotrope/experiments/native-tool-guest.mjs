@@ -1,6 +1,6 @@
 // The tool is a separate persistent vat. A per-step key makes retries safe.
-/** @type {{ Far: typeof import('@endo/far').Far }} */
-const { Far } = /** @type {{ Far: typeof import('@endo/far').Far }} */ (/** @type {unknown} */ (globalThis));
+// Far is supplied by the confined guest environment at installation.
+const { Far } = /** @type {{ Far: (name: string, methods: object) => any }} */ (/** @type {unknown} */ (globalThis));
 
 export const make = () => {
   let sum = 0;

@@ -1,7 +1,8 @@
 // This module is installed as source in its own Ironhorse vat. Its only
 // authority is the two named facets the installer grants.
-/** @type {{ Far: typeof import('@endo/far').Far, E: typeof import('@endo/far').E }} */
-const { Far, E } = /** @type {{ Far: typeof import('@endo/far').Far, E: typeof import('@endo/far').E }} */ (/** @type {unknown} */ (globalThis));
+// These names are injected by the confined guest environment. This source is
+// bundled for SES, so its type comments must contain no import syntax.
+const { Far, E } = /** @type {{ Far: (name: string, methods: object) => any, E: (ref: any) => any }} */ (/** @type {unknown} */ (globalThis));
 
 export const make = ({ model, tool }) => {
   const turns = new Map();
