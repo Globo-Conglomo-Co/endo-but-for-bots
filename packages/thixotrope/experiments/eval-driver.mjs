@@ -153,7 +153,10 @@ for await (const line of lines) {
     const value = await operations[request.op](request);
     reply(id, { ok: true, value });
   } catch (error) {
-    reply(id, { ok: false, error: { message: String(error?.message ?? error) } });
+    reply(id, {
+      ok: false,
+      error: { message: error instanceof Error ? error.message : String(error) },
+    });
   }
 }
 await operations.close();

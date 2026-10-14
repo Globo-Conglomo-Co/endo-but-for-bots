@@ -4,6 +4,7 @@
     "*.js",
     "bin/**/*.js",
     "examples/**/*.js",
+    "experiments/**/*.mjs",
     "src/**/*.js",
     "resources/**/*.js",
     "test"
