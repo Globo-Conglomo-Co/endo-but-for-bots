@@ -759,9 +759,18 @@ const buildDaemon = async (
   // The transient sessions a previous process left, named before this one
   // can seat any of its own: no turn separates the netlayer's start from
   // the sweep below today, and none added later may sweep a live one.
-  const staleTransient = Object.keys(
-    store.getHubState()?.sessions ?? {},
-  ).filter(key => key.startsWith('transient:'));
+  // A transient key whose session entry is already gone still names the
+  // rows it originated, which other sessions' answer routes may pin; forgetting
+  // it again releases them (bd-1991).
+  const hubState = store.getHubState();
+  const staleTransient = [
+    ...new Set([
+      ...Object.keys(hubState?.sessions ?? {}),
+      ...Object.values(hubState?.refs ?? {}).map(
+        (/** @type {any} */ row) => row.origin,
+      ),
+    ]),
+  ].filter(key => typeof key === 'string' && key.startsWith('transient:'));
   netlayerRef.netlayer.start?.();
   const { location } = netlayerRef.netlayer;
 
