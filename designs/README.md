@@ -187,14 +187,11 @@ primitive and the nine-layer pivot from SturdyRef: `@endo/parcel`, the
 initial/shared location-authority split, `E.open`, inline marshal forms, and the
 unchanged `ocapn-sturdyref` wire tag),
 [sturdy-refs-endor-syscall](sturdy-refs-endor-syscall.md) (added
-2026-06-23; design 2 of 2 in a competing pair addressing the
-maintainer's directive on PR #500 to land SturdyRefs in
-`@endo/pass-style` and thread them through the daemon's
-pet-name-path surface; this design rejects worker-local SturdyRef
-retention and proposes daemon-side ephemeral retention plus a new
-`endor` worker syscall (`retain` / `release`) for cross-turn
-retention, contrasting with the parallel `FinalizationRegistry`-
-based plan in the sibling design),
+2026-06-23, transformed 2026-10-15; Parcel carriage and opening across
+Slot Machine: inline Smallcaps over the existing canonical-CBOR envelope,
+ordinary delivery to a closely held communications vat, host or guest-shard
+peer keys mapped through a persistent kernel table, and no Parcel-specific
+syscall or live-retention edge),
 [chat-inventory-create-menu](chat-inventory-create-menu.md) (added
 2026-06-02, revised 2026-06-08; `+` button at the bottom of the
 inventory in Chat opens a pop-over menu listing whole-cloth item
@@ -400,7 +397,7 @@ LLM-agent stack).*
 | [daemon-retention-paths](daemon-retention-paths.md) | 2026-04-30 | 2026-05-19 | In Progress (PR #284) |
 | [retention-path-notation](retention-path-notation.md) | 2026-05-10 | 2026-05-19 | Reference |
 | [runtime-container-fs-mount](runtime-container-fs-mount.md) | 2026-08-10 | 2026-09-08 | **Complete** |
-| [sturdy-refs-endor-syscall](sturdy-refs-endor-syscall.md) | 2026-06-23 | 2026-10-14 | Superseded by [parcel](parcel.md); retention/revocation prior art only |
+| [sturdy-refs-endor-syscall](sturdy-refs-endor-syscall.md) | 2026-06-23 | 2026-10-15 | Proposed (Parcel carriage and opening across Slot Machine) |
 | [parcel](parcel.md) | 2026-10-14 | 2026-10-14 | Proposed |
 | [daemon-rename-to-manager](daemon-rename-to-manager.md) | 2026-05-04 | 2026-05-05 | In Progress |
 | [daemon-guest-eval-simplification](daemon-guest-eval-simplification.md) | 2026-03-21 | 2026-05-04 | **Implemented** |
@@ -1188,7 +1185,7 @@ finalized.
 | ocapn-noise-cryptographic-review | Deprecated (superseded by [ocapn-noise-network](ocapn-noise-network.md)) | External review coordination |
 | daemon-agent-network-identity | In Progress | Per-agent keypairs for network identity |
 | daemon-ocapn-external-connectivity | In Progress | Daemon adopts `@endo/ocapn` for the daemon-to-daemon peer edge; retires the bespoke `EndoNetwork`/`EndoGreeter`/`RemoteControl` CapTP peer stack. Worker, CLI, and web-gateway edges stay CapTP. Satisfies the daemon-integration half of the M4 exit criterion (implementation in-flight: PRs #340, #684, #688, #693) |
-| parcel | Proposed | Canonical Parcel primitive and nine-layer SturdyRef pivot: initial/shared authority, inline marshal forms, OCapN adaptation, and daemon/agent integration. The layer-9 retention questions remain review gates. |
+| parcel | Proposed | Canonical Parcel primitive and nine-layer SturdyRef pivot: initial/shared authority, inline marshal forms, OCapN adaptation, and daemon/agent integration. Layer 9 opens Parcels through Slot Machine's communications vat; only the opened result participates in live retention. |
 | ~~ocapn-noise-network~~ | **Complete** | Noise IK netlayer for OCapN landed via PR #137 (merged 2026-05-08), consolidating the stacked PRs #111 (CBOR codec) + #112 (Noise IK netlayer) + #113 (transport tests) |
 | ~~ocapn-iroh-netlayer~~ | **Complete** | iroh 1.0 QUIC netlayer for `@endo/ocapn` (`@endo/ocapn-iroh`): dial-by-EndpointId with discovery/relays, netstring framing under the `ocapn/netstring/0` ALPN, standard `op:start-session`; implemented with the design |
 | thixotrope | In Progress | OCapN comms hub owned by Thixotrope; XS and Ironhorse SQLite workers; snapshot/journal recovery; persistent guest objects, answers, and listeners; local supervisor, application installation, observable inventory, and vat retention diagnostics. Layered durable acceptance and outbox recovery are implemented in protocol v2; the application admission API remains separate design work. Potential mechanisms are tracked separately in the package designs. |

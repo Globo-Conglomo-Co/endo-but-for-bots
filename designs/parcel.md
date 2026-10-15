@@ -299,9 +299,13 @@ That shared shape is why the shim follows the `HandledPromise` pattern, and why 
 | 6 | #1396 | Rename `makeSturdyRef` to `makeParcel`, construct from received location data with the connection's open hook, and remove the private minting-connection serialization restriction. |
 | 7 | #1397 | Rename the JavaScript object and helpers to Parcel; remove the transitional private coordinates table in favor of privileged `locate`; open through bootstrap and nonce location; preserve `ocapn-sturdyref` on the wire. |
 | 8 | #1398 | Rename daemon locator/formula helpers to Parcel and return a dormant formula Parcel without incarnating it; keep provenance checks at the daemon boundary. |
-| 9 | #1399 | Rename the agent and worker API to Parcel and `open`; base it on the canonical contract here. The worker-retention, named-call, tool-consumer, and weak-import ownership questions remain review gates. |
+| 9 | #1399 | Rename the agent and worker API to Parcel and `open`; base it on the canonical contract here. Slot Machine carriage and communications-vat opening follow [`sturdy-refs-endor-syscall.md`](sturdy-refs-endor-syscall.md); named-call, tool-consumer, and weak-import ownership questions remain review gates. |
 
-The retention and revocation questions in [`sturdy-refs-endor-syscall.md`](sturdy-refs-endor-syscall.md) (who keeps a parcel alive in a worker, and how the user revokes it) are unchanged by the rename and remain inputs to layer 8.
+[`sturdy-refs-endor-syscall.md`](sturdy-refs-endor-syscall.md) now specifies the
+transport boundary this language design leaves open: Slot Machine copies a
+Parcel inline, opens it through a closely held communications vat, and assigns
+live retention only to the opened result. It is an input to the worker-facing
+layer 9 and the daemon export/revocation work in layer 8.
 
 ## Dependencies
 
