@@ -940,7 +940,7 @@ jobs:
 
       - name: Retain platform Math bits
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: math-${{ matrix.check }}
           path: |
@@ -1016,7 +1016,7 @@ jobs:
           exit "$status"
       - name: Retain comparison evidence even on divergence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: math-differences
           path: math-*-differences.tsv
@@ -1340,7 +1340,7 @@ jobs:
 
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ironhorse-fuzz-tripwire-artifacts
           path: rust/engine/ironhorse-fuzz/fuzz/artifacts/
@@ -1433,7 +1433,7 @@ jobs:
 
       - name: Upload the comparison
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cross-target
           path: rust/engine/stack-lanes/cross-target.json
