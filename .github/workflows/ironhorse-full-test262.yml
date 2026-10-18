@@ -86,7 +86,7 @@ jobs:
         run: python3 rust/engine/benches/code_size.py --output engine-code-size.json
       - name: Upload comparison report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xs-microbenchmarks
           path: |
@@ -180,7 +180,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ironhorse-test262-report
           path: |
@@ -201,7 +201,7 @@ jobs:
       # (see rust/engine/ironhorse-262/scripts/README.md, "CI").
       - name: Upload resume state + diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ironhorse-test262-resume-state
           path: |
@@ -280,7 +280,7 @@ jobs:
           cargo test --manifest-path rust/engine/Cargo.toml --locked --release -p ironhorse-snapshot --test classification_bench -- --ignored --nocapture --test-threads=1 2>&1 | tee classification.log
       - name: Upload performance measurements
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ironhorse-performance
           path: |
@@ -410,7 +410,7 @@ jobs:
           python3 sweep.py --no-build --check --output sweep.json 2>&1 | tee sweep.log
       - name: Upload lane reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ironhorse-stack-lanes
           path: |
