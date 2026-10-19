@@ -3,7 +3,7 @@
 import net from 'net';
 import { E } from '@endo/eventual-send';
 import { Far } from '@endo/marshal';
-import { test } from './_util.js';
+import { makeTestOcapn, test } from './_util.js';
 import { makeOcapn } from '../src/client/index.js';
 import { makeTcpNetLayer } from '../src/netlayers/tcp-test-only.js';
 import { encodeSwissnum } from '../src/client/util.js';
@@ -237,13 +237,13 @@ test('cbor framing round-trip through the test-only TCP netlayer', async t => {
   /** @type {NetlayerRef<Awaited<ReturnType<typeof makeTcpNetLayer>>>} */
   const netlayerRefB = {};
 
-  const clientA = await makeOcapn({
+  const clientA = await makeTestOcapn({
     codec: cborCodec,
     network: captureTcpNetLayer(netlayerRefA, 'cbor-A'),
     debugLabel: 'cbor-A',
     debugMode: true,
   });
-  const clientB = await makeOcapn({
+  const clientB = await makeTestOcapn({
     codec: cborCodec,
     network: captureTcpNetLayer(netlayerRefB, 'cbor-B'),
     debugLabel: 'cbor-B',
@@ -284,13 +284,13 @@ test('cbor framing is the default when no framing option is passed', async t => 
   /** @type {NetlayerRef<Awaited<ReturnType<typeof makeTcpNetLayer>>>} */
   const netlayerRefB = {};
 
-  const clientA = await makeOcapn({
+  const clientA = await makeTestOcapn({
     codec: cborCodec,
     network: captureTcpNetLayerDefaultFraming(netlayerRefA, 'cbor-default-A'),
     debugLabel: 'cbor-default-A',
     debugMode: true,
   });
-  const clientB = await makeOcapn({
+  const clientB = await makeTestOcapn({
     codec: cborCodec,
     network: captureTcpNetLayerDefaultFraming(netlayerRefB, 'cbor-default-B'),
     debugLabel: 'cbor-default-B',
